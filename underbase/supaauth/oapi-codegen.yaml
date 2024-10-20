@@ -1,0 +1,7 @@
+package: admin
+generate:
+  - client
+  - types
+include-tags:
+  - user
+output: client.go

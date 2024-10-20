@@ -1,0 +1,75 @@
+services:
+  traefik:
+    image: traefik:v2.5
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--entrypoints.web.address=:80"
+    ports:
+      - "80:80"
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  postgresdb:
+    image: postgres:17
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./init/init.sql:/docker-entrypoint-initdb.d/init.sql
+    environment:
+      POSTGRES_DB: app_db
+      POSTGRES_USER: app_user
+      POSTGRES_PASSWORD: password
+    healthcheck:
+      test: pg_isready -U app_user -h 127.0.0.1
+      interval: 1s
+
+  gotrue:
+    image: supabase/auth:v2.163.0
+    depends_on:
+      postgresdb:
+        condition: service_healthy
+    environment:
+      - GOTRUE_SITE_URL=http://localhost/auth
+      - API_EXTERNAL_URL=http://localhost/auth
+      - GOTRUE_JWT_SECRET=ABCDasdadsdsaadsEFGHIJKsssssssssLMNOPQRSTUVWXYZ0123456789123123123
+      - GOTRUE_DB_DRIVER=postgres
+      - DATABASE_URL=postgres://app_user:password@postgresdb:5432/app_db?search_path=auth
+      - GOTRUE_API_HOST=0.0.0.0
+      - PORT=9999
+      - GOTRUE_MAILER_AUTOCONFIRM=true
+      - DB_NAMESPACE=auth
+      - GOTRUE_DB_NAMESPACE=auth
+      - GOTRUE_JWT_AUD=authenticated
+      - GOTRUE_JWT_DEFAULT_GROUP_NAME=authenticated
+      - GOTRUE_JWT_ADMIN_ROLES=superadmin
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.gotrue.rule=PathPrefix(`/auth`)"
+      - "traefik.http.services.gotrue.loadbalancer.server.port=9999"
+      - "traefik.http.middlewares.gotrue-stripprefix.stripprefix.prefixes=/auth"
+      - "traefik.http.routers.gotrue.middlewares=gotrue-stripprefix"
+  backend:
+    build:
+      context: ./underbase
+      dockerfile: Dockerfile
+    environment:
+      - AUTHORIZER_ENDPOINT=http://gotrue:9999
+    labels:
+    - "traefik.enable=true"
+    - "traefik.http.routers.backend.rule=PathPrefix(`/backend`)"
+    - "traefik.http.services.backend.loadbalancer.server.port=3000"
+    - "traefik.http.middlewares.backend-stripprefix.stripprefix.prefixes=/backend"
+    - "traefik.http.routers.backend.middlewares=backend-stripprefix"
+  frontend:
+    build:
+      context: ./testfrontend
+      dockerfile: Dockerfile
+      args:
+        AUTHORIZER: http://localhost/auth
+        BACKEND: http://localhost/backend
+    labels:
+    - "traefik.enable=true"
+    - "traefik.http.routers.frontend.rule=PathPrefix(`/`)"
+    - "traefik.http.services.frontend.loadbalancer.server.port=80"

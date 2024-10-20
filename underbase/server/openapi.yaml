@@ -1,0 +1,44 @@
+openapi: 3.0.0
+info:
+  title: Hello API
+  version: 1.0.0
+  description: A simple API with authentication
+
+
+servers:
+  - url: /api/v1
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+
+paths:
+  /hello:
+    get:
+      summary: Get a greeting
+      description: Returns a greeting message when authenticated
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Hello, authenticated user!"
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Missing authorization token"
